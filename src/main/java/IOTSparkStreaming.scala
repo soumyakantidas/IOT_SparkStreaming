@@ -1,13 +1,13 @@
-import com.datastax.spark.connector.SomeColumns
-import kafka.serializer.StringDecoder
-import org.apache.log4j.{Level, Logger}
-import org.apache.spark.sql.types.{StructField, StructType}
+import java.util
 
-//import org.apache.spark.sql.types.{StructField, StructType}
+import com.datastax.spark.connector.SomeColumns
 import com.datastax.spark.connector.streaming._
+import kafka.serializer.StringDecoder
+import org.apache.kafka.clients.producer.{KafkaProducer, ProducerConfig, ProducerRecord}
+import org.apache.log4j.{Level, Logger}
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.kafka.KafkaUtils
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 
@@ -36,8 +36,7 @@ object IOTSparkStreaming {
     val topics = List("fitbit", "new-user-notification").toSet
 
     val kafkaOutputBrokers = "DIN16000309:9092"
-    val kafkaOutputTopic = "test-output1"
-    val windowSec = 20
+    val kafkaOutputTopic = "mapData"
     val keySpaceName = "iot"
     val tableName = "user_details"
 
@@ -45,6 +44,8 @@ object IOTSparkStreaming {
       ssc, kafkaParams, topics).map(_._2)
 
     val fitbitStream = lines.filter(_.split(",")(0) == "fitbit")
+
+
     val newUserStream = lines.filter(_.split(",")(0) == "new-user-notification")
       .map(line => {
         val array = line.split(",")
@@ -60,15 +61,15 @@ object IOTSparkStreaming {
         val bpDia = array(10).trim.toDouble
         val userID = array(11).trim
         val deviceID = array(12).trim
-        /*val updateRow = Seq(Row(userID, deviceID, age, bfp, bmi, bpCat, bpDia,
-          bpSys, category, gender, height, weight))*/
-
         (userID, deviceID, age, bfp, bmi, bpCat, bpDia,
           bpSys, category, gender, height, weight)
         // updateUserTable(spark, updateRow)
       }).saveToCassandra(keySpaceName, tableName, SomeColumns("user_id", "device_id", "age", "bfp", "bmi", "bp_cat",
       "bp_dia", "bp_sys", "category", "gender", "height", "weight"))
 
+    userLatLongTable(fitbitStream, keySpaceName)
+
+    mapData(fitbitStream, kafkaOutputTopic, kafkaOutputBrokers)
 
     //newUserStream.print()
 
@@ -78,30 +79,52 @@ object IOTSparkStreaming {
     ssc.awaitTermination()
   }
 
-  def updateUserTable(spark: SparkSession, updateRow: Seq[Row]): Unit = {
-    val updateRdd = spark.sparkContext.parallelize(updateRow)
-    val tblStruct = new StructType(
-      Array(StructField("user_id", StringType, nullable = false),
-        StructField("device_id", StringType, nullable = false),
-        StructField("age", IntegerType, nullable = false),
-        StructField("bfp", DoubleType, nullable = false),
-        StructField("bmi", DoubleType, nullable = false),
-        StructField("bp_cat", StringType, nullable = false),
-        StructField("bp_dia", DoubleType, nullable = false),
-        StructField("bp_sys", DoubleType, nullable = false),
-        StructField("category", StringType, nullable = false),
-        StructField("gender", StringType, nullable = false),
-        StructField("height", DoubleType, nullable = false),
-        StructField("weight", DoubleType, nullable = false)
-      )
-    )
+  def mapData(fitbitStream: DStream[String], kafkaOutputTopic: String, kafkaOutputBrokers: String): Unit = {
+    val data = fitbitStream
+      .map(line => {
+        val array = line.split(",")
+        val userID = array(2).trim
+        val lat = array(3).trim
+        val long = array(4).trim
+        val pulse = (array(5).trim.toDouble + 0.5).toInt
+        val temp = array(6).trim.toDouble
+        (userID, lat, long, pulse, temp)
+      })
 
-    val updateDf = spark.sqlContext.createDataFrame(updateRdd, tblStruct)
+    data.foreachRDD(rdd => {
+      rdd.foreachPartition(partition => {
 
-    updateDf.write.format("org.apache.spark.sql.cassandra")
-      .options(Map("keyspace" -> "IOT", "table" -> "user_details"))
-      .mode("append")
-      .save()
+        val producer = new KafkaProducer[String, String](setupKafkaProducer(kafkaOutputBrokers))
+        partition.foreach(record => {
+          val data = record.toString
+          val message = new ProducerRecord[String, String](kafkaOutputTopic, data)
+          producer.send(message)
+
+        })
+        producer.close()
+      })
+    })
+  }
+
+  def userLatLongTable(fitbitStream: DStream[String], keySpaceName: String): Unit = {
+    fitbitStream
+      .map(line => {
+        val array = line.split(",")
+        val userID = array(2).trim
+        val lat = array(3).trim
+        val long = array(4).trim
+        (userID, lat, long)
+      }).saveToCassandra(keySpaceName, tableName = "latest_location", SomeColumns("user_id", "lat", "long"))
+  }
+
+  def setupKafkaProducer(kafkaOutputBrokers: String): util.HashMap[String, Object] = {
+    val props = new util.HashMap[String, Object]()
+    props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaOutputBrokers)
+    props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
+      "org.apache.kafka.common.serialization.StringSerializer")
+    props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
+      "org.apache.kafka.common.serialization.StringSerializer")
+    props
   }
 
 }

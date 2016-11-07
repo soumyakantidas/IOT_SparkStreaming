@@ -13,3 +13,12 @@ create table IOT.user_details(
   device_id text,
   PRIMARY KEY(user_id, device_id)
 );
+
+create table iot.latest_location(
+    user_id text primary key,
+    lat text,
+    long text
+);
+
+truncate table iot.user_details;
+truncate table iot.latest_location;
