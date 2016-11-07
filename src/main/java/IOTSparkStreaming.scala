@@ -71,6 +71,8 @@ object IOTSparkStreaming {
 
     mapData(fitbitStream, kafkaOutputTopic, kafkaOutputBrokers)
 
+    warningNotification(fitbitStream, kafkaOutputTopic = "warningNotification", kafkaOutputBrokers)
+
     //newUserStream.print()
 
     //Start the application
@@ -90,6 +92,46 @@ object IOTSparkStreaming {
         val temp = array(6).trim.toDouble
         (userID, lat, long, pulse, temp)
       })
+
+    data.foreachRDD(rdd => {
+      rdd.foreachPartition(partition => {
+
+        val producer = new KafkaProducer[String, String](setupKafkaProducer(kafkaOutputBrokers))
+        partition.foreach(record => {
+          val data = record.toString
+          val message = new ProducerRecord[String, String](kafkaOutputTopic, data)
+          producer.send(message)
+
+        })
+        producer.close()
+      })
+    })
+  }
+
+  def warningNotification(fitbitStream: DStream[String], kafkaOutputTopic: String, kafkaOutputBrokers: String): Unit = {
+    val data = fitbitStream
+      .map(line => {
+        val array = line.split(",")
+        val userID = array(2).trim
+        val pulse = (array(5).trim.toDouble + 0.5).toInt
+        val temp = array(6).trim.toDouble
+        val age = array(7).trim.toInt
+        val bpCat = array(8).trim
+
+        val maxPulseLimit = {
+          if (age < 40) 220 - age else 208 - 0.75 * age
+        }
+
+        val warning = {
+          if (pulse >= 0.95 * maxPulseLimit) {
+            if (List("HYP_1", "HYP_2", "HYP_CR").contains(bpCat)) "critical"
+            else "simple"
+          } else "no-use"
+        }
+        (userID, warning)
+      })
+      .filter(_._2 != "no-use")
+
 
     data.foreachRDD(rdd => {
       rdd.foreachPartition(partition => {
