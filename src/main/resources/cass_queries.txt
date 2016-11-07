@@ -1,0 +1,15 @@
+create table IOT.user_details(
+  age int,
+  gender text,
+  category text,
+  weight double,
+  height double,
+  bmi double,
+  bfp double,
+  bp_cat text,
+  bp_sys double,
+  bp_dia double,
+  user_id text,
+  device_id text,
+  PRIMARY KEY(user_id, device_id)
+);
