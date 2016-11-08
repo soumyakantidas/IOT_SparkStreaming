@@ -45,6 +45,7 @@ object IOTSparkStreaming {
 
     val fitbitStream = lines.filter(_.split(",")(0) == "fitbit")
 
+    warningNotification(fitbitStream, kafkaOutputTopic = "warningNotification", kafkaOutputBrokers)
 
     val newUserStream = lines.filter(_.split(",")(0) == "new-user-notification")
       .map(line => {
@@ -67,11 +68,12 @@ object IOTSparkStreaming {
       }).saveToCassandra(keySpaceName, tableName, SomeColumns("user_id", "device_id", "age", "bfp", "bmi", "bp_cat",
       "bp_dia", "bp_sys", "category", "gender", "height", "weight"))
 
+
     userLatLongTable(fitbitStream, keySpaceName)
 
     mapData(fitbitStream, kafkaOutputTopic, kafkaOutputBrokers)
 
-    warningNotification(fitbitStream, kafkaOutputTopic = "warningNotification", kafkaOutputBrokers)
+
 
     ssc.checkpoint("C:/checkpoint/")
     ssc.start()
