@@ -22,3 +22,10 @@ create table iot.latest_location(
 
 truncate table iot.user_details;
 truncate table iot.latest_location;
+truncate table iot.sales;
+
+
+create table iot.sales(
+    date text primary key,
+    count int
+);

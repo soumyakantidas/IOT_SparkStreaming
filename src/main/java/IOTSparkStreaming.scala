@@ -33,7 +33,7 @@ object IOTSparkStreaming {
     val kafkaParams = Map("metadata.broker.list" -> "DIN16000309:9092")
 
     //topics is the set to which this Spark instance will listen.
-    val topics = List("fitbit", "new-user-notification").toSet
+    val topics = List("fitbit", "new-user-notification", "sales").toSet
 
     val kafkaOutputBrokers = "DIN16000309:9092"
     val kafkaOutputTopic = "mapData"
@@ -67,6 +67,13 @@ object IOTSparkStreaming {
         // updateUserTable(spark, updateRow)
       }).saveToCassandra(keySpaceName, tableName, SomeColumns("user_id", "device_id", "age", "bfp", "bmi", "bp_cat",
       "bp_dia", "bp_sys", "category", "gender", "height", "weight"))
+
+
+    val saleStream = lines.filter(_.split(",")(0) == "sales")
+      .map(line => {
+        (line.split(",")(1).trim, line.split(",")(2).trim.toInt)
+      })
+      .saveToCassandra(keySpaceName, tableName = "sales", SomeColumns("date", "count"))
 
 
     userLatLongTable(fitbitStream, keySpaceName)
