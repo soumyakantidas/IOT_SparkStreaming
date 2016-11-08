@@ -73,9 +73,6 @@ object IOTSparkStreaming {
 
     warningNotification(fitbitStream, kafkaOutputTopic = "warningNotification", kafkaOutputBrokers)
 
-    //newUserStream.print()
-
-    //Start the application
     ssc.checkpoint("C:/checkpoint/")
     ssc.start()
     ssc.awaitTermination()
@@ -117,6 +114,7 @@ object IOTSparkStreaming {
         val temp = array(6).trim.toDouble
         val age = array(7).trim.toInt
         val bpCat = array(8).trim
+        val machineTimeStamp = array(9).trim
 
         val maxPulseLimit = {
           if (age < 40) 220 - age else 208 - 0.75 * age
@@ -128,7 +126,7 @@ object IOTSparkStreaming {
             else "simple"
           } else "no-use"
         }
-        (userID, warning)
+        (userID, warning, machineTimeStamp)
       })
       .filter(_._2 != "no-use")
 
