@@ -1,0 +1,44 @@
+create table iot.user_details(
+  age int,
+  gender text,
+  category text,
+  weight double,
+  height double,
+  bmi double,
+  bfp double,
+  bp_cat text,
+  bp_sys double,
+  bp_dia double,
+  user_id text PRIMARY KEY,
+  device_id text
+);
+
+create table iot.latest_location(
+    user_id text primary key,
+    lat text,
+    long text
+);
+
+truncate table iot.user_details;
+truncate table iot.latest_location;
+truncate table iot.sales;
+truncate table iot.userHistory;
+
+
+create table iot.sales(
+    date text primary key,
+    count int
+);
+
+
+
+create table iot.userhistory(
+    user_id text,
+    date text,
+    time text,
+    lat text,
+    long text,
+    pulse double,
+    temp double,
+    PRIMARY KEY((user_id), date, time)
+);
