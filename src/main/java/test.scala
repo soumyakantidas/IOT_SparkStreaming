@@ -40,12 +40,12 @@ object test {
     val topics = List("fitbit", "new-user-notification", "sales").toSet
 
     val kafkaOutputBrokers = "DIN16000309:9092"
-    val kafkaOutputTopic = "mapData"
+    //    val kafkaOutputTopic = "mapData"
     val keySpaceName = "iot"
     val tableName = "user_details"
     val tableNameUserHistory = "userhistory"
 
-    val cassandraSQLRDD = sc.cassandraTable(keySpaceName, tableNameUserHistory)
+    //    val cassandraSQLRDD = sc.cassandraTable(keySpaceName, tableNameUserHistory)
 
     val lines = KafkaUtils.createDirectStream[String, String, StringDecoder, StringDecoder](
       ssc, kafkaParams, topics).map(_._2)
@@ -76,10 +76,12 @@ object test {
       .saveToCassandra(keySpaceName, tableName, SomeColumns("user_id", "age", "bfp", "bmi", "bp_cat",
         "bp_dia", "bp_sys", "category", "device_id", "gender", "height", "weight"))
 
-    val userDetailsTableRDD = sc.cassandraTable("iot", "user_details").select("user_id",
-      "category").map(line => {
-      (line.getString("user_id"), line.getString("category"))
-    })
+    /*
+        val userDetailsTableRDD = sc.cassandraTable("iot", "user_details").select("user_id",
+          "category").map(line => {
+          (line.getString("user_id"), line.getString("category"))
+        })
+    */
 
 
     warningNotification(fitbitStream, kafkaOutputTopic = "warningNotification", kafkaOutputBrokers)
@@ -125,7 +127,7 @@ object test {
         }
 
         val warning = {
-          if (pulse >= 0.7 * maxPulseLimit) {
+          if (pulse >= 0.85 * maxPulseLimit) {
             if (List("HYP_1", "HYP_2", "HYP_CR").contains(bpCat)) "critical"
             else "simple"
           } else "no-use"
@@ -168,7 +170,7 @@ object test {
         }
 
         val warning = {
-          if (pulse >= 0.7 * maxPulseLimit) {
+          if (pulse >= 0.85 * maxPulseLimit) {
             if (List("HYP_1", "HYP_2", "HYP_CR").contains(bpCat)) "critical"
             else "simple"
           } else "no-use"
@@ -180,12 +182,16 @@ object test {
         val user_id = line._1
         val machineTimeStamp = line._3
 
-        (user_id, "HOLA!")
+        (user_id, machineTimeStamp)
       })
       .joinWithCassandraTable("iot", "user_details", SomeColumns("category"), joinColumns =
         SomeColumns("user_id"))
       .map(line => {
-        (line._1._1, line._2.getString("category"))
+        //        val user_id = line._1._1
+        //        val category = line._2.getString("category")
+        val machineTimeStamp = line._1._2
+        //        (user_id, category, machineTimeStamp)
+        machineTimeStamp
       })
 
 
@@ -194,7 +200,7 @@ object test {
       rdd.foreachPartition(partition => {
         val producer = new KafkaProducer[String, String](setupKafkaProducer(kafkaOutputBrokers))
         partition.foreach(record => {
-          val data = record.toString()
+          val data = record //.toString()
           val message = new ProducerRecord[String, String](kafkaOutputTopic, data)
           producer.send(message)
 
@@ -221,13 +227,7 @@ object test {
         (userID, simulationDate, dateTime, lat, long, pulse, temp)
       })
       .saveToCassandra(keySpaceName, tableName, SomeColumns("user_id", "date", "time", "lat", "long", "pulse", "temp"))
-    /*      .foreachRDD(rdd => {
-          rdd.foreachPartition(partition => {
-            partition.foreach(record => {
-              println(record.toString)
-            })
-          })
-        })*/
+
   }
 
   def userLatLongTable(fitbitStream: DStream[String], keySpaceName: String): Unit = {
